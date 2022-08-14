@@ -1,0 +1,2 @@
+# rh
+hash check
