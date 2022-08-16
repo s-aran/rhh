@@ -3,6 +3,7 @@ use std::io::Read;
 
 use crypto::digest::Digest;
 use crypto::md5::Md5;
+use crypto::sha1::Sha1;
 
 fn main() {
     println!("Hello, world!");
@@ -14,4 +15,8 @@ fn main() {
     let mut md5 = Md5::new();
     md5.input(buf.as_slice());
     println!("{}", md5.result_str());
+
+    let mut sha1 = Sha1::new();
+    sha1.input(buf.as_slice());
+    println!("{}", sha1.result_str());
 }
