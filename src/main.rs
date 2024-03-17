@@ -11,14 +11,12 @@ use crypto::sha2::Sha256;
 fn main() {
     println!("Hello, world!");
 
-    let args = env::args().collect();
+    let args: Vec<String> = env::args().collect();
 
     let handlers = HashMap::from([("f", |value: &str| {
         println!("f");
         value == "test"
     })]);
-
-    
 
     let mut file = File::open("Cargo.lock").unwrap();
     let mut buf = Vec::new();
