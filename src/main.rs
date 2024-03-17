@@ -8,6 +8,39 @@ use crypto::md5::Md5;
 use crypto::sha1::Sha1;
 use crypto::sha2::Sha256;
 
+trait Hash {
+    fn calc(value: impl Into<String>) -> String;
+}
+
+struct Md5Hash {}
+
+impl Hash for Md5Hash {
+    fn calc(value: impl Into<String>) -> String {
+        let mut md5 = Md5::new();
+        md5.input(value.into().as_bytes());
+        md5.result_str()
+    }
+}
+
+struct Sha1Hash {}
+
+impl Hash for Sha1Hash {
+    fn calc(value: impl Into<String>) -> String {
+        let mut sha1 = Sha1::new();
+        sha1.input(value.into().as_bytes());
+        sha1.result_str()
+    }
+}
+struct Sha256Hash {}
+
+impl Hash for Sha256Hash {
+    fn calc(value: impl Into<String>) -> String {
+        let mut sha256 = Sha256::new();
+        sha256.input(value.into().as_bytes());
+        sha256.result_str()
+    }
+}
+
 fn main() {
     println!("Hello, world!");
 
@@ -19,18 +52,15 @@ fn main() {
     })]);
 
     let mut file = File::open("Cargo.lock").unwrap();
-    let mut buf = Vec::new();
-    let _ = file.read_to_end(&mut buf);
+    let mut buf = String::new();
+    let _ = file.read_to_string(&mut buf);
 
-    let mut md5 = Md5::new();
-    md5.input(buf.as_slice());
-    println!("{}", md5.result_str());
+    let md5hash = Md5Hash::calc(&buf);
+    println!("{}", md5hash);
 
-    let mut sha1 = Sha1::new();
-    sha1.input(buf.as_slice());
-    println!("{}", sha1.result_str());
+    let sha1hash = Sha1Hash::calc(&buf);
+    println!("{}", sha1hash);
 
-    let mut sha256 = Sha256::new();
-    sha256.input(buf.as_slice());
-    println!("{}", sha256.result_str());
+    let sha256hash = Sha256Hash::calc(&buf);
+    println!("{}", sha256hash);
 }
