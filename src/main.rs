@@ -1,5 +1,4 @@
-use std::fs::File;
-use std::io::Read;
+use std::{fs::File, future::Future, io::Read, process::Output};
 
 use crypto::digest::Digest;
 use crypto::md5::Md5;
@@ -44,12 +43,32 @@ impl Hash for Sha256Hash {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about=None)]
 struct Args {
+    #[arg(help = "FILE")]
+    file: Option<Vec<String>>,
     #[arg(
         short = 'c',
         long = "check",
         help = "read checksums from the FILEs and check them"
     )]
     filepath: Option<String>,
+}
+
+async fn async_calc_md5(value: impl Into<String>) -> String {
+    Md5Hash::calc(value)
+}
+
+async fn async_calc_sha1(value: impl Into<String>) -> String {
+    Sha1Hash::calc(value)
+}
+
+async fn async_calc_sha256(value: impl Into<String>) -> String {
+    Sha256Hash::calc(value)
+}
+
+async fn async_calc_md5_from_file(file: &mut File) -> impl Future<Output = String> {
+    let mut buf = String::new();
+    let _ = file.read_to_string(&mut buf);
+    async_calc_md5(buf)
 }
 
 fn main() {
@@ -61,12 +80,22 @@ fn main() {
     let mut buf = String::new();
     let _ = file.read_to_string(&mut buf);
 
-    let md5hash = Md5Hash::calc(&buf);
-    println!("{}", md5hash);
+    let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let sha1hash = Sha1Hash::calc(&buf);
-    println!("{}", sha1hash);
+    rt.block_on(async {
+        let md5hash = async_calc_md5(&buf).await;
+        println!("{}", md5hash);
 
-    let sha256hash = Sha256Hash::calc(&buf);
-    println!("{}", sha256hash);
+        let sha1hash = async_calc_sha1(&buf).await;
+        println!("{}", sha1hash);
+
+        let sha256hash = async_calc_sha256(&buf).await;
+        println!("{}", sha256hash);
+
+        for f in args.file.unwrap() {
+            let mut file = File::open(&f).unwrap();
+            let md5hash = async_calc_md5_from_file(&mut file).await;
+            println!("{}  {}", md5hash.await, &f);
+        }
+    });
 }
