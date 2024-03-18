@@ -8,6 +8,8 @@ use crypto::md5::Md5;
 use crypto::sha1::Sha1;
 use crypto::sha2::Sha256;
 
+use clap::{arg, command, Parser};
+
 trait Hash {
     fn calc(value: impl Into<String>) -> String;
 }
@@ -41,15 +43,21 @@ impl Hash for Sha256Hash {
     }
 }
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about=None)]
+struct Args {
+    #[arg(
+        short = 'c',
+        long = "check",
+        help = "read checksums from the FILEs and check them"
+    )]
+    filepath: Option<String>,
+}
+
 fn main() {
     println!("Hello, world!");
 
-    let args: Vec<String> = env::args().collect();
-
-    let handlers = HashMap::from([("f", |value: &str| {
-        println!("f");
-        value == "test"
-    })]);
+    let args = Args::parse();
 
     let mut file = File::open("Cargo.lock").unwrap();
     let mut buf = String::new();

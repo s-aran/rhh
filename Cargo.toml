@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 rust-crypto = "^0.2"
-clap = "^4.5"
+clap = { version = "^4.5", features = ["derive"]}
+tokio = { version = "1.36.0", features = ["rt", "bytes", "fs", "macros", "windows-sys", "sync", "rt-multi-thread", "process", "io-std", "io-util", "signal", "time"] }
