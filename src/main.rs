@@ -1,4 +1,7 @@
-use std::{fs::File, future::Future, io::Read, process::Output};
+use glob::glob;
+use std::path::{Path, PathBuf};
+use std::thread::available_parallelism;
+use std::{fs::File, future::Future, io::Read};
 
 use crypto::digest::Digest;
 use crypto::md5::Md5;
@@ -71,6 +74,21 @@ async fn async_calc_md5_from_file(file: &mut File) -> impl Future<Output = Strin
     async_calc_md5(buf)
 }
 
+fn glob_with_recursive(pattern: &str) {
+    glob(pattern)
+        .expect("Failed to read glob pattern")
+        .for_each(|entry| match entry {
+            Ok(path) => {
+                if path.is_dir() {
+                    glob_with_recursive(&format!("{}/*", path.display()));
+                } else {
+                    println!("{}", path.display());
+                }
+            }
+            Err(e) => println!("{:?}", e),
+        });
+}
+
 fn main() {
     println!("Hello, world!");
 
@@ -102,4 +120,9 @@ fn main() {
             println!("{}  {}", md5hash.await, &f);
         }
     });
+
+    let cpus = available_parallelism().unwrap().get();
+    println!("number of CPUs: {}", cpus);
+
+    glob_with_recursive("./*");
 }
