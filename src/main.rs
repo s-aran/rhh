@@ -92,6 +92,10 @@ fn main() {
         let sha256hash = async_calc_sha256(&buf).await;
         println!("{}", sha256hash);
 
+        if args.file.is_none() {
+            return;
+        }
+
         for f in args.file.unwrap() {
             let mut file = File::open(&f).unwrap();
             let md5hash = async_calc_md5_from_file(&mut file).await;
