@@ -1,5 +1,5 @@
 use glob::glob;
-use std::path::{Path, PathBuf};
+use std::path::{self, Path, PathBuf};
 use std::thread::available_parallelism;
 use std::{fs::File, future::Future, io::Read};
 
@@ -9,9 +9,37 @@ use crypto::sha1::Sha1;
 use crypto::sha2::Sha256;
 
 use clap::{arg, command, Parser};
+use rusqlite::{Connection, Result};
+
+enum HashAlgorithm
+{
+    Md5 = 1,
+    Sha1 = 2,
+    Sha256 = 3,
+}
+
+#[derive(Debug)]
+struct FileHash {
+    fullpath: String,
+    filename: String,
+    algorithm: HashAlgorithm,
+    hash: String,
+}
+
 
 trait Hash {
     fn calc(value: impl Into<String>) -> String;
+
+    fn calc_from_file(file: &mut File) -> String {
+        let mut buf = String::new();
+        let _ = file.read_to_string(&mut buf);
+        Self::calc(buf)
+    }
+
+    fn calc_from_path(path: &Path) -> String {
+        let mut file = File::open(path).unwrap();
+        Self::calc_from_file(&mut file)
+    }
 }
 
 struct Md5Hash {}
@@ -33,6 +61,7 @@ impl Hash for Sha1Hash {
         sha1.result_str()
     }
 }
+
 struct Sha256Hash {}
 
 impl Hash for Sha256Hash {
@@ -56,6 +85,14 @@ struct Args {
     filepath: Option<String>,
 }
 
+fn open_db_file(path: &Path) -> Result<ruqlite::Connection, rusqlite::Error> {
+    rusqlite::Connection::open(&path)
+}
+
+fn open_db_in_memory() -> Result<rusqlite::Connection, rusqlite::Error> {
+    rusqlite::Connection::open_in_memory()
+}
+
 async fn async_calc_md5(value: impl Into<String>) -> String {
     Md5Hash::calc(value)
 }
@@ -74,15 +111,18 @@ async fn async_calc_md5_from_file(file: &mut File) -> impl Future<Output = Strin
     async_calc_md5(buf)
 }
 
-fn glob_with_recursive(pattern: &str) {
+fn glob_with_recursive<F>(pattern: &str, handler: &mut F)
+where
+    F: FnMut(&PathBuf) -> (),
+{
     glob(pattern)
         .expect("Failed to read glob pattern")
         .for_each(|entry| match entry {
             Ok(path) => {
                 if path.is_dir() {
-                    glob_with_recursive(&format!("{}/*", path.display()));
+                    glob_with_recursive(&format!("{}/*", path.display()), handler);
                 } else {
-                    println!("{}", path.display());
+                    handler(&path);
                 }
             }
             Err(e) => println!("{:?}", e),
@@ -124,5 +164,17 @@ fn main() {
     let cpus = available_parallelism().unwrap().get();
     println!("number of CPUs: {}", cpus);
 
-    glob_with_recursive("./*");
+    glob_with_recursive("./*", &mut |p| {
+        let mut f = File::open(p).unwrap();
+        let mut buf = String::new();
+        let _ = f.read_to_string(&mut buf);
+        println!(
+            "{}    {}    {}",
+            p.display(),
+            Md5Hash::calc(&buf),
+            Sha1Hash::calc(&buf)
+        );
+    });
+
+
 }
