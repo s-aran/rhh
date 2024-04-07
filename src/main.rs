@@ -11,8 +11,10 @@ use crypto::sha2::Sha256;
 use clap::{arg, command, Parser};
 use rusqlite::{Connection, Result};
 
-enum HashAlgorithm
-{
+mod db;
+
+#[derive(Debug)]
+enum HashAlgorithm {
     Md5 = 1,
     Sha1 = 2,
     Sha256 = 3,
@@ -20,12 +22,10 @@ enum HashAlgorithm
 
 #[derive(Debug)]
 struct FileHash {
-    fullpath: String,
-    filename: String,
+    full_path: String,
     algorithm: HashAlgorithm,
-    hash: String,
+    hash: Vec<u8>,
 }
-
 
 trait Hash {
     fn calc(value: impl Into<String>) -> String;
@@ -83,14 +83,6 @@ struct Args {
         help = "read checksums from the FILEs and check them"
     )]
     filepath: Option<String>,
-}
-
-fn open_db_file(path: &Path) -> Result<ruqlite::Connection, rusqlite::Error> {
-    rusqlite::Connection::open(&path)
-}
-
-fn open_db_in_memory() -> Result<rusqlite::Connection, rusqlite::Error> {
-    rusqlite::Connection::open_in_memory()
 }
 
 async fn async_calc_md5(value: impl Into<String>) -> String {
