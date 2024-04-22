@@ -20,10 +20,35 @@ enum HashAlgorithm {
     Sha256 = 3,
 }
 
+// #[derive(Debug)]
+// struct FileHash {
+//     full_path: String,
+//     algorithm: HashAlgorithm,
+//     hash: Vec<u8>,
+// }
+
 #[derive(Debug)]
-struct FileHash {
+struct Files {
+    id: u64,
     full_path: String,
-    algorithm: HashAlgorithm,
+    file_name: String,
+}
+
+#[derive(Debug)]
+struct Md5HashTable {
+    file_id: u64,
+    hash: Vec<u8>,
+}
+
+#[derive(Debug)]
+struct Sha1HashTable {
+    file_id: u64,
+    hash: Vec<u8>,
+}
+
+#[derive(Debug)]
+struct Sha256HashTable {
+    file_id: u64,
     hash: Vec<u8>,
 }
 
@@ -156,17 +181,94 @@ fn main() {
     let cpus = available_parallelism().unwrap().get();
     println!("number of CPUs: {}", cpus);
 
+    // glob_with_recursive("./*", &mut |p| {
+    //     let mut f = File::open(p).unwrap();
+    //     let mut buf = String::new();
+    //     let _ = f.read_to_string(&mut buf);
+    //     println!(
+    //         "{}    {}    {}",
+    //         p.display(),
+    //         Md5Hash::calc(&buf),
+    //         Sha1Hash::calc(&buf)
+    //     );
+    // });
+
+    let db_path = Path::new("hash_table.db");
+    let conn = Connection::open(&db_path).unwrap();
+
+    println!("con = {:?}", conn);
+
+    let initialize_list = [r#"
+        PRAGMA foreign_keys=true
+        "#];
+    let create_tables = [
+        r#"
+        CREATE TABLE IF NOT EXISTS files (
+            id INTEGER PRIMARY KEY,
+            full_path TEXT NOT NULL,
+            file_name TEXT NOT NULL
+        );
+        "#,
+        r#"CREATE TABLE IF NOT EXISTS md5_hash_table (
+            id INTEGER PRIMARY KEY,
+            file_id INTEGER NOT NULL UNIQUE,
+            hash BLOB NOT NULL,
+            FOREIGN KEY (file_id) REFERENCES files (id)
+        );
+        "#,
+        r#"CREATE TABLE IF NOT EXISTS sha256_hash_table (
+            id INTEGER PRIMARY KEY,
+            file_id INTEGER NOT NULL UNIQUE,
+            hash BLOB NOT NULL,
+            FOREIGN KEY (file_id) REFERENCES files (id)
+        );
+        "#,
+    ];
+
+    for sql in initialize_list {
+        conn.execute(sql, []).unwrap();
+    }
+
+    for sql in create_tables {
+        conn.execute(sql, []).unwrap();
+    }
+
+    let insert_files = r#"
+        INSERT INTO files (full_path, file_name)
+        VALUES (?, ?)
+    "#;
+
+    let insert_md5_hash_table = r#"
+        INSERT INTO md5_hash_table (file_id, hash)
+        VALUES (?, ?)
+    "#;
+
+    let insert_sha256_hash_table = r#"
+        INSERT INTO sha256_hash_table (file_id, hash)
+        VALUES (?, ?)
+    "#;
+
     glob_with_recursive("./*", &mut |p| {
         let mut f = File::open(p).unwrap();
         let mut buf = String::new();
+
         let _ = f.read_to_string(&mut buf);
-        println!(
-            "{}    {}    {}",
-            p.display(),
-            Md5Hash::calc(&buf),
-            Sha1Hash::calc(&buf)
-        );
+        let file_name = p.file_name().unwrap().to_str().unwrap();
+
+        let mut stmt = conn.prepare(insert_files).unwrap();
+        stmt.execute([p.to_str().unwrap(), file_name]).unwrap();
+        let last_id = conn.last_insert_rowid();
+
+        {
+            let md5_hash = Md5Hash::calc(&buf);
+            let mut stmt = conn.prepare(insert_md5_hash_table).unwrap();
+            stmt.execute([last_id.to_string(), md5_hash]).unwrap();
+        }
+
+        {
+            let sha256_hash = Sha256Hash::calc(&buf);
+            let mut stmt = conn.prepare(insert_sha256_hash_table).unwrap();
+            stmt.execute([last_id.to_string(), sha256_hash]).unwrap();
+        }
     });
-
-
 }
