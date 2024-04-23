@@ -2,6 +2,7 @@ use glob::glob;
 use std::path::{self, Path, PathBuf};
 use std::thread::available_parallelism;
 use std::{fs::File, future::Future, io::Read};
+use tokio::task::futures;
 
 use crypto::digest::Digest;
 use crypto::md5::Md5;
@@ -238,15 +239,7 @@ fn main() {
         VALUES (?, ?)
     "#;
 
-    let insert_md5_hash_table = r#"
-        INSERT INTO md5_hash_table (file_id, hash)
-        VALUES (?, ?)
-    "#;
-
-    let insert_sha256_hash_table = r#"
-        INSERT INTO sha256_hash_table (file_id, hash)
-        VALUES (?, ?)
-    "#;
+    let rt = tokio::runtime::Runtime::new().unwrap();
 
     glob_with_recursive("./*", &mut |p| {
         let mut f = File::open(p).unwrap();
@@ -259,16 +252,35 @@ fn main() {
         stmt.execute([p.to_str().unwrap(), file_name]).unwrap();
         let last_id = conn.last_insert_rowid();
 
-        {
-            let md5_hash = Md5Hash::calc(&buf);
-            let mut stmt = conn.prepare(insert_md5_hash_table).unwrap();
-            stmt.execute([last_id.to_string(), md5_hash]).unwrap();
-        }
-
-        {
-            let sha256_hash = Sha256Hash::calc(&buf);
-            let mut stmt = conn.prepare(insert_sha256_hash_table).unwrap();
-            stmt.execute([last_id.to_string(), sha256_hash]).unwrap();
-        }
+        rt.block_on(insert_hash_table(&conn, last_id));
     });
+}
+
+async fn insert_hash_table(conn: &Connection, file_id: i64) {
+    insert_md5_hash_table(conn, file_id).await;
+    insert_sha256_hash_table(conn, file_id).await;
+}
+
+async fn insert_md5_hash_table(conn: &Connection, file_id: i64) {
+    static INSERT_SQL: &str = r#"
+        INSERT INTO md5_hash_table (file_id, hash)
+        VALUES (?, ?)
+    "#;
+
+    let buf = String::new();
+    let md5_hash = Md5Hash::calc(&buf);
+    let mut stmt = conn.prepare(INSERT_SQL).unwrap();
+    stmt.execute([file_id.to_string(), md5_hash]).unwrap();
+}
+
+async fn insert_sha256_hash_table(conn: &Connection, file_id: i64) {
+    static INSERT_SQL: &str = r#"
+        INSERT INTO sha256_hash_table (file_id, hash)
+        VALUES (?, ?)
+    "#;
+
+    let buf = String::new();
+    let sha256_hash = Sha256Hash::calc(&buf);
+    let mut stmt = conn.prepare(INSERT_SQL).unwrap();
+    stmt.execute([file_id.to_string(), sha256_hash]).unwrap();
 }
