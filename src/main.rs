@@ -239,33 +239,7 @@ fn main() {
     let mut file_list: Vec<PathBuf> = vec![];
     glob_with_recursive("./*", &mut |p| {
         file_list.push(p.clone());
-        // let mut f = File::open(p).unwrap();
-        // let mut buf = String::new();
-
-        // let _ = f.read_to_string(&mut buf);
-        // let file_name = p.file_name().unwrap().to_str().unwrap();
-
-        // let mut stmt = conn.prepare(insert_files).unwrap();
-        // stmt.execute([p.to_str().unwrap(), file_name]).unwrap();
-        // let last_id = conn.last_insert_rowid();
-
-        // let ppp = p.clone();
-
-        // thread::spawn(move || {
-        //     let conn = Connection::open(&db_path).unwrap();
-        //     let file_id = last_id.clone();
-        //     let pp = &ppp.clone();
-        //     insert_md5_hash_table(&conn, file_id, &pp);
-        // });
-
-        // thread::spawn(move || {
-        //     let conn = Connection::open(&db_path).unwrap();
-        //     let file_id = last_id.clone();
-        //     let pp = &ppp.clone();
-        //     insert_sha256_hash_table(&conn, file_id, &pp);
-        // });
     });
-
 
     let tx = conn.transaction().unwrap();
     for file in file_list.iter() {
