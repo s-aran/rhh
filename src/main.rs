@@ -1,6 +1,8 @@
 use glob::glob;
+use std::borrow::Borrow;
+use std::cell::RefCell;
 use std::path::{self, Path, PathBuf};
-use std::thread::available_parallelism;
+use std::thread::{self, available_parallelism};
 use std::{fs::File, future::Future, io::Read};
 use tokio::task::futures;
 
@@ -195,7 +197,7 @@ fn main() {
     // });
 
     let db_path = Path::new("hash_table.db");
-    let conn = Connection::open(&db_path).unwrap();
+    let mut conn = Connection::open(&db_path).unwrap();
 
     println!("con = {:?}", conn);
 
@@ -234,53 +236,83 @@ fn main() {
         conn.execute(sql, []).unwrap();
     }
 
-    let insert_files = r#"
+    let mut file_list: Vec<PathBuf> = vec![];
+    glob_with_recursive("./*", &mut |p| {
+        file_list.push(p.clone());
+        // let mut f = File::open(p).unwrap();
+        // let mut buf = String::new();
+
+        // let _ = f.read_to_string(&mut buf);
+        // let file_name = p.file_name().unwrap().to_str().unwrap();
+
+        // let mut stmt = conn.prepare(insert_files).unwrap();
+        // stmt.execute([p.to_str().unwrap(), file_name]).unwrap();
+        // let last_id = conn.last_insert_rowid();
+
+        // let ppp = p.clone();
+
+        // thread::spawn(move || {
+        //     let conn = Connection::open(&db_path).unwrap();
+        //     let file_id = last_id.clone();
+        //     let pp = &ppp.clone();
+        //     insert_md5_hash_table(&conn, file_id, &pp);
+        // });
+
+        // thread::spawn(move || {
+        //     let conn = Connection::open(&db_path).unwrap();
+        //     let file_id = last_id.clone();
+        //     let pp = &ppp.clone();
+        //     insert_sha256_hash_table(&conn, file_id, &pp);
+        // });
+    });
+
+
+    let tx = conn.transaction().unwrap();
+    for file in file_list.iter() {
+        let file_id = insert_files(&tx, &file);
+
+        insert_md5_hash_table(&tx, file_id, &file);
+        insert_sha256_hash_table(&tx, file_id, &file);
+    }
+    tx.commit();
+}
+
+fn insert_files(conn: &Connection, path: &PathBuf) -> i64 
+{
+    static INSERT_SQL: &str = r#"
         INSERT INTO files (full_path, file_name)
         VALUES (?, ?)
     "#;
 
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let file_name = path.file_name().unwrap().to_str().unwrap();
+    let mut stmt = conn.prepare(INSERT_SQL).unwrap();
+    stmt.execute([path.to_str().unwrap(), file_name]).unwrap();
 
-    glob_with_recursive("./*", &mut |p| {
-        let mut f = File::open(p).unwrap();
-        let mut buf = String::new();
-
-        let _ = f.read_to_string(&mut buf);
-        let file_name = p.file_name().unwrap().to_str().unwrap();
-
-        let mut stmt = conn.prepare(insert_files).unwrap();
-        stmt.execute([p.to_str().unwrap(), file_name]).unwrap();
-        let last_id = conn.last_insert_rowid();
-
-        rt.block_on(insert_hash_table(&conn, last_id));
-    });
+    conn.last_insert_rowid()
 }
 
-async fn insert_hash_table(conn: &Connection, file_id: i64) {
-    insert_md5_hash_table(conn, file_id).await;
-    insert_sha256_hash_table(conn, file_id).await;
-}
-
-async fn insert_md5_hash_table(conn: &Connection, file_id: i64) {
+fn insert_md5_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i64 {
     static INSERT_SQL: &str = r#"
         INSERT INTO md5_hash_table (file_id, hash)
         VALUES (?, ?)
     "#;
 
-    let buf = String::new();
-    let md5_hash = Md5Hash::calc(&buf);
+    let md5_hash = Md5Hash::calc_from_path(&path);
     let mut stmt = conn.prepare(INSERT_SQL).unwrap();
     stmt.execute([file_id.to_string(), md5_hash]).unwrap();
+
+    conn.last_insert_rowid()
 }
 
-async fn insert_sha256_hash_table(conn: &Connection, file_id: i64) {
+fn insert_sha256_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i64 {
     static INSERT_SQL: &str = r#"
         INSERT INTO sha256_hash_table (file_id, hash)
         VALUES (?, ?)
     "#;
 
-    let buf = String::new();
-    let sha256_hash = Sha256Hash::calc(&buf);
+    let sha256_hash = Sha256Hash::calc_from_path(&path);
     let mut stmt = conn.prepare(INSERT_SQL).unwrap();
     stmt.execute([file_id.to_string(), sha256_hash]).unwrap();
+
+    conn.last_insert_rowid()
 }
