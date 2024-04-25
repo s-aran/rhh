@@ -1,10 +1,8 @@
 use glob::glob;
-use std::borrow::Borrow;
-use std::cell::RefCell;
 use std::path::{self, Path, PathBuf};
+use std::rc::Rc;
 use std::thread::{self, available_parallelism};
 use std::{fs::File, future::Future, io::Read};
-use tokio::task::futures;
 
 use crypto::digest::Digest;
 use crypto::md5::Md5;
@@ -12,47 +10,116 @@ use crypto::sha1::Sha1;
 use crypto::sha2::Sha256;
 
 use clap::{arg, command, Parser};
-use rusqlite::{Connection, Result};
+use rusqlite::{Connection, Transaction};
 
 mod db;
 
-#[derive(Debug)]
-enum HashAlgorithm {
-    Md5 = 1,
-    Sha1 = 2,
-    Sha256 = 3,
+trait Model {
+    fn get(connection: &Connection, id: i64) -> Self;
+    fn all(connection: &Connection) -> Vec<Rc<Self>>;
+    fn create(&self, connection: &Connection) -> i64;
+    fn update(&self, connection: &Connection) -> i64;
+    fn delete(&self, connection: &Connection);
 }
 
-// #[derive(Debug)]
-// struct FileHash {
-//     full_path: String,
-//     algorithm: HashAlgorithm,
-//     hash: Vec<u8>,
-// }
-
 #[derive(Debug)]
-struct Files {
-    id: u64,
-    full_path: String,
-    file_name: String,
+struct FileTable {
+    pub id: Option<i64>,
+    pub full_path: String,
+    pub file_name: String,
 }
 
 #[derive(Debug)]
 struct Md5HashTable {
-    file_id: u64,
-    hash: Vec<u8>,
+    pub file_id: i64,
+    pub hash: Vec<u8>,
 }
 
 #[derive(Debug)]
 struct Sha1HashTable {
-    file_id: u64,
-    hash: Vec<u8>,
+    pub file_id: i64,
+    pub hash: Vec<u8>,
 }
 
 #[derive(Debug)]
 struct Sha256HashTable {
-    file_id: u64,
-    hash: Vec<u8>,
+    pub file_id: i64,
+    pub hash: Vec<u8>,
+}
+
+impl Model for FileTable {
+    fn get(connection: &Connection, id: i64) -> Self {
+        static SQL: &str = "SELECT * FROM files WHERE id = ?";
+
+        let mut stmt = connection.prepare(SQL).unwrap();
+        let mut rows = stmt.query(&[&id]).unwrap();
+        let row = rows.next().unwrap().unwrap();
+        let full_path = row.get(1).unwrap();
+        let file_name = row.get(2).unwrap();
+
+        Self {
+            id: Some(id),
+            full_path,
+            file_name,
+        }
+    }
+
+    fn all(connection: &Connection) -> Vec<Rc<Self>> {
+        static SQL: &str = "SELECT * FROM files";
+
+        let mut stmt = connection.prepare(SQL).unwrap();
+        let mut rows = stmt.query([]).unwrap();
+        let mut files = Vec::new();
+        while let Some(row) = rows.next().unwrap() {
+            let id = row.get(0).unwrap();
+            let full_path = row.get(1).unwrap();
+            let file_name = row.get(2).unwrap();
+            files.push(Rc::new(Self {
+                id: Some(id),
+                full_path,
+                file_name,
+            }))
+        }
+
+        files
+    }
+
+    fn create(&self, connection: &Connection) -> i64 {
+        static INSERT_SQL: &str = r#"
+            INSERT INTO files (full_path, file_name)
+            VALUES (?,?)
+        "#;
+
+        let mut stmt = connection.prepare(INSERT_SQL).unwrap();
+        stmt.execute([&self.full_path, &self.file_name]).unwrap();
+
+        connection.last_insert_rowid()
+    }
+
+    fn update(&self, connection: &Connection) -> i64 {
+        static UPDATE_SQL: &str = r#"
+            UPDATE files SET full_path=?, file_name=? WHERE id=?
+        "#;
+
+        let mut stmt = connection.prepare(UPDATE_SQL).unwrap();
+        stmt.execute([
+            &self.full_path,
+            &self.file_name,
+            &format!("{}", self.id.unwrap()),
+        ])
+        .unwrap();
+
+        self.id.unwrap()
+    }
+
+    fn delete(&self, connection: &Connection) {
+        static DELETE_SQL: &str = r#"
+            DELETE FROM files WHERE id=?
+        "#;
+
+        let mut stmt = connection.prepare(DELETE_SQL).unwrap();
+        stmt.execute([self.id.unwrap()]).unwrap();
+    }
 }
 
 trait Hash {
@@ -228,12 +295,16 @@ fn main() {
         "#,
     ];
 
-    for sql in initialize_list {
-        conn.execute(sql, []).unwrap();
-    }
+    {
+        let tx = conn.transaction().unwrap();
+        for sql in initialize_list {
+            tx.execute(sql, []).unwrap();
+        }
 
-    for sql in create_tables {
-        conn.execute(sql, []).unwrap();
+        for sql in create_tables {
+            tx.execute(sql, []).unwrap();
+        }
+        tx.commit();
     }
 
     let mut file_list: Vec<PathBuf> = vec![];
@@ -241,28 +312,27 @@ fn main() {
         file_list.push(p.clone());
     });
 
-    let tx = conn.transaction().unwrap();
-    for file in file_list.iter() {
-        let file_id = insert_files(&tx, &file);
+    {
+        let tx = conn.transaction().unwrap();
+        for file in file_list.iter() {
+            let file_id = insert_files(&tx, &file);
 
-        insert_md5_hash_table(&tx, file_id, &file);
-        insert_sha256_hash_table(&tx, file_id, &file);
+            insert_md5_hash_table(&tx, file_id, &file);
+            insert_sha256_hash_table(&tx, file_id, &file);
+        }
+        tx.commit();
     }
-    tx.commit();
 }
 
-fn insert_files(conn: &Connection, path: &PathBuf) -> i64 
-{
-    static INSERT_SQL: &str = r#"
-        INSERT INTO files (full_path, file_name)
-        VALUES (?, ?)
-    "#;
-
+fn insert_files(conn: &Connection, path: &PathBuf) -> i64 {
     let file_name = path.file_name().unwrap().to_str().unwrap();
-    let mut stmt = conn.prepare(INSERT_SQL).unwrap();
-    stmt.execute([path.to_str().unwrap(), file_name]).unwrap();
+    let f = FileTable {
+        id: None,
+        full_path: path.to_str().unwrap().to_string(),
+        file_name: file_name.to_string(),
+    };
 
-    conn.last_insert_rowid()
+    f.create(conn)
 }
 
 fn insert_md5_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i64 {
