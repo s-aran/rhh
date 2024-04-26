@@ -1,4 +1,5 @@
 use glob::glob;
+use models::model::Model;
 use std::path::{self, Path, PathBuf};
 use std::rc::Rc;
 use std::thread::{self, available_parallelism};
@@ -13,114 +14,13 @@ use clap::{arg, command, Parser};
 use rusqlite::{Connection, Transaction};
 
 mod db;
+mod models;
 
-trait Model {
-    fn get(connection: &Connection, id: i64) -> Self;
-    fn all(connection: &Connection) -> Vec<Rc<Self>>;
-    fn create(&self, connection: &Connection) -> i64;
-    fn update(&self, connection: &Connection) -> i64;
-    fn delete(&self, connection: &Connection);
-}
+use models::file_table::FileTable;
+use models::md5_hash_table::Md5HashTable;
+use models::sha1_hash_table::Sha1HashTable;
+use models::sha256_hash_table::Sha256HashTable;
 
-#[derive(Debug)]
-struct FileTable {
-    pub id: Option<i64>,
-    pub full_path: String,
-    pub file_name: String,
-}
-
-#[derive(Debug)]
-struct Md5HashTable {
-    pub file_id: i64,
-    pub hash: Vec<u8>,
-}
-
-#[derive(Debug)]
-struct Sha1HashTable {
-    pub file_id: i64,
-    pub hash: Vec<u8>,
-}
-
-#[derive(Debug)]
-struct Sha256HashTable {
-    pub file_id: i64,
-    pub hash: Vec<u8>,
-}
-
-impl Model for FileTable {
-    fn get(connection: &Connection, id: i64) -> Self {
-        static SQL: &str = "SELECT * FROM files WHERE id = ?";
-
-        let mut stmt = connection.prepare(SQL).unwrap();
-        let mut rows = stmt.query(&[&id]).unwrap();
-        let row = rows.next().unwrap().unwrap();
-        let full_path = row.get(1).unwrap();
-        let file_name = row.get(2).unwrap();
-
-        Self {
-            id: Some(id),
-            full_path,
-            file_name,
-        }
-    }
-
-    fn all(connection: &Connection) -> Vec<Rc<Self>> {
-        static SQL: &str = "SELECT * FROM files";
-
-        let mut stmt = connection.prepare(SQL).unwrap();
-        let mut rows = stmt.query([]).unwrap();
-        let mut files = Vec::new();
-        while let Some(row) = rows.next().unwrap() {
-            let id = row.get(0).unwrap();
-            let full_path = row.get(1).unwrap();
-            let file_name = row.get(2).unwrap();
-            files.push(Rc::new(Self {
-                id: Some(id),
-                full_path,
-                file_name,
-            }))
-        }
-
-        files
-    }
-
-    fn create(&self, connection: &Connection) -> i64 {
-        static INSERT_SQL: &str = r#"
-            INSERT INTO files (full_path, file_name)
-            VALUES (?,?)
-        "#;
-
-        let mut stmt = connection.prepare(INSERT_SQL).unwrap();
-        stmt.execute([&self.full_path, &self.file_name]).unwrap();
-
-        connection.last_insert_rowid()
-    }
-
-    fn update(&self, connection: &Connection) -> i64 {
-        static UPDATE_SQL: &str = r#"
-            UPDATE files SET full_path=?, file_name=? WHERE id=?
-        "#;
-
-        let mut stmt = connection.prepare(UPDATE_SQL).unwrap();
-        stmt.execute([
-            &self.full_path,
-            &self.file_name,
-            &format!("{}", self.id.unwrap()),
-        ])
-        .unwrap();
-
-        self.id.unwrap()
-    }
-
-    fn delete(&self, connection: &Connection) {
-        static DELETE_SQL: &str = r#"
-            DELETE FROM files WHERE id=?
-        "#;
-
-        let mut stmt = connection.prepare(DELETE_SQL).unwrap();
-        stmt.execute([self.id.unwrap()]).unwrap();
-    }
-}
 
 trait Hash {
     fn calc(value: impl Into<String>) -> String;
@@ -286,6 +186,13 @@ fn main() {
             FOREIGN KEY (file_id) REFERENCES files (id)
         );
         "#,
+        r#"CREATE TABLE IF NOT EXISTS sha1_hash_table (
+            id INTEGER PRIMARY KEY,
+            file_id INTEGER NOT NULL UNIQUE,
+            hash BLOB NOT NULL,
+            FOREIGN KEY (file_id) REFERENCES files (id)
+        );
+        "#,
         r#"CREATE TABLE IF NOT EXISTS sha256_hash_table (
             id INTEGER PRIMARY KEY,
             file_id INTEGER NOT NULL UNIQUE,
@@ -318,6 +225,7 @@ fn main() {
             let file_id = insert_files(&tx, &file);
 
             insert_md5_hash_table(&tx, file_id, &file);
+            insert_sha1_hash_table(&tx, file_id, &file);
             insert_sha256_hash_table(&tx, file_id, &file);
         }
         tx.commit();
@@ -336,27 +244,34 @@ fn insert_files(conn: &Connection, path: &PathBuf) -> i64 {
 }
 
 fn insert_md5_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i64 {
-    static INSERT_SQL: &str = r#"
-        INSERT INTO md5_hash_table (file_id, hash)
-        VALUES (?, ?)
-    "#;
+    let hash = Md5Hash::calc_from_path(&path);
+    let h = Md5HashTable {
+        id: None,
+        file_id,
+        hash,
+    };
 
-    let md5_hash = Md5Hash::calc_from_path(&path);
-    let mut stmt = conn.prepare(INSERT_SQL).unwrap();
-    stmt.execute([file_id.to_string(), md5_hash]).unwrap();
+    h.create(conn)
+}
 
-    conn.last_insert_rowid()
+fn insert_sha1_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i64 {
+    let hash = Sha1Hash::calc_from_path(&path);
+    let h = Sha1HashTable {
+        id: None,
+        file_id,
+        hash
+    };
+
+    h.create(conn)
 }
 
 fn insert_sha256_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i64 {
-    static INSERT_SQL: &str = r#"
-        INSERT INTO sha256_hash_table (file_id, hash)
-        VALUES (?, ?)
-    "#;
+    let hash = Sha256Hash::calc_from_path(&path);
+    let h = Sha256HashTable {
+        id: None,
+        file_id,
+        hash
+    };
 
-    let sha256_hash = Sha256Hash::calc_from_path(&path);
-    let mut stmt = conn.prepare(INSERT_SQL).unwrap();
-    stmt.execute([file_id.to_string(), sha256_hash]).unwrap();
-
-    conn.last_insert_rowid()
+    h.create(conn)
 }
