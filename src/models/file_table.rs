@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, Result};
 
 use super::model::Model;
 
@@ -49,7 +49,19 @@ impl Model for FileTable {
         files
     }
 
-    fn create(&self, connection: &Connection) -> i64 {
+    fn create(connection: &Connection) -> Result<usize> {
+        static SQL: &str = r#"
+        CREATE TABLE IF NOT EXISTS files (
+            id INTEGER PRIMARY KEY,
+            full_path TEXT NOT NULL,
+            file_name TEXT NOT NULL
+        );
+        "#;
+
+        connection.execute(SQL, [])
+    }
+
+    fn insert(&self, connection: &Connection) -> i64 {
         static INSERT_SQL: &str = r#"
             INSERT INTO files (full_path, file_name)
             VALUES (?,?)

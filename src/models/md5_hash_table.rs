@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, Result};
 
 use super::model::Model;
 
@@ -50,7 +50,18 @@ impl Model for Md5HashTable {
         result
     }
 
-    fn create(&self, connection: &Connection) -> i64 {
+    fn create(connection: &Connection) -> Result<usize> {
+        static SQL: &str = r#"CREATE TABLE IF NOT EXISTS md5_hash_table (
+            id INTEGER PRIMARY KEY,
+            file_id INTEGER NOT NULL UNIQUE,
+            hash BLOB NOT NULL,
+            FOREIGN KEY (file_id) REFERENCES files (id)
+        );
+        "#;
+
+        connection.execute(SQL, [])
+    }
+    fn insert(&self, connection: &Connection) -> i64 {
         static INSERT_SQL: &str = r#"
         INSERT INTO md5_hash_table (file_id, hash)
         VALUES (?, ?)

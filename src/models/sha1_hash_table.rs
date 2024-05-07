@@ -1,10 +1,8 @@
-
 use std::rc::Rc;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, Result};
 
 use super::model::Model;
-
 
 #[derive(Debug)]
 pub struct Sha1HashTable {
@@ -12,7 +10,6 @@ pub struct Sha1HashTable {
     pub file_id: i64,
     pub hash: String,
 }
-
 
 impl Model for Sha1HashTable {
     fn get(connection: &Connection, id: i64) -> Self {
@@ -53,7 +50,19 @@ impl Model for Sha1HashTable {
         result
     }
 
-    fn create(&self, connection: &Connection) -> i64 {
+    fn create(connection: &Connection) -> Result<usize> {
+        static SQL: &str = r#"CREATE TABLE IF NOT EXISTS sha1_hash_table (
+            id INTEGER PRIMARY KEY,
+            file_id INTEGER NOT NULL UNIQUE,
+            hash BLOB NOT NULL,
+            FOREIGN KEY (file_id) REFERENCES files (id)
+        );
+        "#;
+
+        connection.execute(SQL, [])
+    }
+
+    fn insert(&self, connection: &Connection) -> i64 {
         static INSERT_SQL: &str = r#"
         INSERT INTO sha1_hash_table (file_id, hash)
         VALUES (?, ?)

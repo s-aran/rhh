@@ -21,7 +21,6 @@ use models::md5_hash_table::Md5HashTable;
 use models::sha1_hash_table::Sha1HashTable;
 use models::sha256_hash_table::Sha256HashTable;
 
-
 trait Hash {
     fn calc(value: impl Into<String>) -> String;
 
@@ -171,36 +170,6 @@ fn main() {
     let initialize_list = [r#"
         PRAGMA foreign_keys=true
         "#];
-    let create_tables = [
-        r#"
-        CREATE TABLE IF NOT EXISTS files (
-            id INTEGER PRIMARY KEY,
-            full_path TEXT NOT NULL,
-            file_name TEXT NOT NULL
-        );
-        "#,
-        r#"CREATE TABLE IF NOT EXISTS md5_hash_table (
-            id INTEGER PRIMARY KEY,
-            file_id INTEGER NOT NULL UNIQUE,
-            hash BLOB NOT NULL,
-            FOREIGN KEY (file_id) REFERENCES files (id)
-        );
-        "#,
-        r#"CREATE TABLE IF NOT EXISTS sha1_hash_table (
-            id INTEGER PRIMARY KEY,
-            file_id INTEGER NOT NULL UNIQUE,
-            hash BLOB NOT NULL,
-            FOREIGN KEY (file_id) REFERENCES files (id)
-        );
-        "#,
-        r#"CREATE TABLE IF NOT EXISTS sha256_hash_table (
-            id INTEGER PRIMARY KEY,
-            file_id INTEGER NOT NULL UNIQUE,
-            hash BLOB NOT NULL,
-            FOREIGN KEY (file_id) REFERENCES files (id)
-        );
-        "#,
-    ];
 
     {
         let tx = conn.transaction().unwrap();
@@ -208,10 +177,18 @@ fn main() {
             tx.execute(sql, []).unwrap();
         }
 
-        for sql in create_tables {
-            tx.execute(sql, []).unwrap();
+        FileTable::create(&tx);
+        Md5HashTable::create(&tx);
+        Sha1HashTable::create(&tx);
+        Sha256HashTable::create(&tx);
+
+        match tx.commit() {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!("transaction commit failed. {:?}", e);
+                return;
+            }
         }
-        tx.commit();
     }
 
     let mut file_list: Vec<PathBuf> = vec![];
@@ -228,7 +205,14 @@ fn main() {
             insert_sha1_hash_table(&tx, file_id, &file);
             insert_sha256_hash_table(&tx, file_id, &file);
         }
-        tx.commit();
+
+        match tx.commit() {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!("transaction commit failed. {:?}", e);
+                return;
+            }
+        }
     }
 }
 
@@ -240,7 +224,7 @@ fn insert_files(conn: &Connection, path: &PathBuf) -> i64 {
         file_name: file_name.to_string(),
     };
 
-    f.create(conn)
+    f.insert(conn)
 }
 
 fn insert_md5_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i64 {
@@ -251,7 +235,7 @@ fn insert_md5_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i64
         hash,
     };
 
-    h.create(conn)
+    h.insert(conn)
 }
 
 fn insert_sha1_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i64 {
@@ -259,10 +243,10 @@ fn insert_sha1_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i6
     let h = Sha1HashTable {
         id: None,
         file_id,
-        hash
+        hash,
     };
 
-    h.create(conn)
+    h.insert(conn)
 }
 
 fn insert_sha256_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i64 {
@@ -270,8 +254,8 @@ fn insert_sha256_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> 
     let h = Sha256HashTable {
         id: None,
         file_id,
-        hash
+        hash,
     };
 
-    h.create(conn)
+    h.insert(conn)
 }
