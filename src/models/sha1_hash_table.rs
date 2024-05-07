@@ -12,6 +12,18 @@ pub struct Sha1HashTable {
 }
 
 impl Model for Sha1HashTable {
+    fn create(connection: &Connection) {
+        static SQL: &str = r#"CREATE TABLE IF NOT EXISTS sha1_hash_table (
+            id INTEGER PRIMARY KEY,
+            file_id INTEGER NOT NULL UNIQUE,
+            hash BLOB NOT NULL,
+            FOREIGN KEY (file_id) REFERENCES files (id)
+        );
+        "#;
+
+        connection.execute(SQL, []).unwrap();
+    }
+
     fn get(connection: &Connection, id: i64) -> Self {
         static SQL: &str = "SELECT * FROM sha1_hash_table WHERE id = ?";
 
@@ -48,18 +60,6 @@ impl Model for Sha1HashTable {
         }
 
         result
-    }
-
-    fn create(connection: &Connection) -> Result<usize> {
-        static SQL: &str = r#"CREATE TABLE IF NOT EXISTS sha1_hash_table (
-            id INTEGER PRIMARY KEY,
-            file_id INTEGER NOT NULL UNIQUE,
-            hash BLOB NOT NULL,
-            FOREIGN KEY (file_id) REFERENCES files (id)
-        );
-        "#;
-
-        connection.execute(SQL, [])
     }
 
     fn insert(&self, connection: &Connection) -> i64 {

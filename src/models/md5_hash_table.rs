@@ -12,6 +12,19 @@ pub struct Md5HashTable {
 }
 
 impl Model for Md5HashTable {
+    fn create(connection: &Connection) {
+        static SQL: &str = r#"CREATE TABLE IF NOT EXISTS md5_hash_table (
+            id INTEGER PRIMARY KEY,
+            file_id INTEGER NOT NULL UNIQUE,
+            hash BLOB NOT NULL,
+            FOREIGN KEY (file_id) REFERENCES files (id)
+            UNIQUE(file_id, hash)
+        );
+        "#;
+
+        connection.execute(SQL, []).unwrap();
+    }
+
     fn get(connection: &Connection, id: i64) -> Self {
         static SQL: &str = "SELECT * FROM md5_hash_table WHERE id = ?";
 
@@ -50,17 +63,6 @@ impl Model for Md5HashTable {
         result
     }
 
-    fn create(connection: &Connection) -> Result<usize> {
-        static SQL: &str = r#"CREATE TABLE IF NOT EXISTS md5_hash_table (
-            id INTEGER PRIMARY KEY,
-            file_id INTEGER NOT NULL UNIQUE,
-            hash BLOB NOT NULL,
-            FOREIGN KEY (file_id) REFERENCES files (id)
-        );
-        "#;
-
-        connection.execute(SQL, [])
-    }
     fn insert(&self, connection: &Connection) -> i64 {
         static INSERT_SQL: &str = r#"
         INSERT INTO md5_hash_table (file_id, hash)
@@ -68,10 +70,14 @@ impl Model for Md5HashTable {
     "#;
 
         let mut stmt = connection.prepare(INSERT_SQL).unwrap();
-        stmt.execute([&format!("{}", self.file_id), &self.hash])
-            .unwrap();
+        match stmt.execute([&format!("{}", self.file_id), &self.hash]) {
+            Ok(_) => return connection.last_insert_rowid(),
+            Err(e) => {
+                eprintln!("FileTable: {}", e);
+            }
+        };
 
-        connection.last_insert_rowid()
+        -1
     }
 
     fn update(&self, connection: &Connection) -> i64 {

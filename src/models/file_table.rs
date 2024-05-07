@@ -12,6 +12,18 @@ pub struct FileTable {
 }
 
 impl Model for FileTable {
+    fn create(connection: &Connection) {
+        static SQL: &str = r#"
+        CREATE TABLE IF NOT EXISTS files (
+            id INTEGER PRIMARY KEY,
+            full_path TEXT NOT NULL UNIQUE,
+            file_name TEXT NOT NULL
+        );
+        "#;
+
+        connection.execute(SQL, []).unwrap();
+    }
+
     fn get(connection: &Connection, id: i64) -> Self {
         static SQL: &str = "SELECT * FROM files WHERE id = ?";
 
@@ -47,18 +59,6 @@ impl Model for FileTable {
         }
 
         files
-    }
-
-    fn create(connection: &Connection) -> Result<usize> {
-        static SQL: &str = r#"
-        CREATE TABLE IF NOT EXISTS files (
-            id INTEGER PRIMARY KEY,
-            full_path TEXT NOT NULL,
-            file_name TEXT NOT NULL
-        );
-        "#;
-
-        connection.execute(SQL, [])
     }
 
     fn insert(&self, connection: &Connection) -> i64 {
