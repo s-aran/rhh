@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use rusqlite::{Connection, Result};
+use rusqlite::Connection;
 
 pub trait Model {
     fn create(connection: &Connection);

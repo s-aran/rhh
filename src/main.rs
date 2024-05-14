@@ -1,8 +1,7 @@
 use glob::glob;
 use models::model::Model;
 use std::path::{self, Path, PathBuf};
-use std::rc::Rc;
-use std::thread::{self, available_parallelism};
+use std::thread::available_parallelism;
 use std::{fs::File, future::Future, io::Read};
 
 use crypto::digest::Digest;
@@ -11,7 +10,7 @@ use crypto::sha1::Sha1;
 use crypto::sha2::Sha256;
 
 use clap::{arg, command, Parser};
-use rusqlite::{Connection, Transaction};
+use rusqlite::Connection;
 
 mod db;
 mod models;
