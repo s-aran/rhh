@@ -1,3 +1,4 @@
+use crate::db;
 use std::rc::Rc;
 
 use rusqlite::Connection;
@@ -69,10 +70,18 @@ impl Model for Sha256HashTable {
     "#;
 
         let mut stmt = connection.prepare(INSERT_SQL).unwrap();
-        stmt.execute([&format!("{}", self.file_id), &self.hash])
-            .unwrap();
+        match stmt.execute([&format!("{}", self.file_id), &self.hash]) {
+            Ok(_) => return connection.last_insert_rowid(),
+            Err(e) => {
+                if db::is_sqlite_error_constraint_violation(&e) {
+                    let duplicated_id = Self::get_id_by_file_id(connection, self.file_id);
+                    return duplicated_id;
+                }
 
-        connection.last_insert_rowid()
+                eprintln!("Sha256HashTable: {}", e);
+                -1
+            }
+        }
     }
 
     fn update(&self, connection: &Connection) -> i64 {
@@ -98,5 +107,11 @@ impl Model for Sha256HashTable {
 
         let mut stmt = connection.prepare(DELETE_SQL).unwrap();
         stmt.execute([self.id.unwrap()]).unwrap();
+    }
+}
+
+impl Sha256HashTable {
+    pub fn get_id_by_file_id(connection: &Connection, file_id: i64) -> i64 {
+        db::get_id_by_file_id(connection, "sha256_hash_table", file_id)
     }
 }

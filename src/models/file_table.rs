@@ -1,6 +1,8 @@
 use std::rc::Rc;
 
-use rusqlite::{Connection, Result};
+use rusqlite::Connection;
+
+use crate::db::is_sqlite_error_constraint_violation;
 
 use super::model::Model;
 
@@ -68,9 +70,18 @@ impl Model for FileTable {
         "#;
 
         let mut stmt = connection.prepare(INSERT_SQL).unwrap();
-        stmt.execute([&self.full_path, &self.file_name]).unwrap();
+        match stmt.execute([&self.full_path, &self.file_name]) {
+            Ok(_) => connection.last_insert_rowid(),
+            Err(e) => {
+                if is_sqlite_error_constraint_violation(&e) {
+                    let duplicated_id = Self::get_id_by_full_path(connection, &self.full_path);
+                    return duplicated_id;
+                }
 
-        connection.last_insert_rowid()
+                eprintln!("FileTable insert failed. {:?}", e);
+                -1
+            }
+        }
     }
 
     fn update(&self, connection: &Connection) -> i64 {
@@ -96,5 +107,21 @@ impl Model for FileTable {
 
         let mut stmt = connection.prepare(DELETE_SQL).unwrap();
         stmt.execute([self.id.unwrap()]).unwrap();
+    }
+}
+
+impl FileTable {
+    pub fn get_id_by_full_path(connection: &Connection, full_path: impl Into<String>) -> i64 {
+        static SQL: &str = r#"
+            SELECT id FROM files WHERE full_path=?
+        "#;
+
+        let mut stmt = connection.prepare(SQL).unwrap();
+        let mut rows = stmt.query(&[&full_path.into()]).unwrap();
+
+        let row = rows.next().unwrap().unwrap();
+        let id = row.get(0).unwrap();
+
+        id
     }
 }

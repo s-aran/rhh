@@ -1,6 +1,8 @@
 use std::rc::Rc;
 
-use rusqlite::{Connection, Result};
+use rusqlite::Connection;
+
+use crate::db;
 
 use super::model::Model;
 
@@ -65,19 +67,23 @@ impl Model for Md5HashTable {
 
     fn insert(&self, connection: &Connection) -> i64 {
         static INSERT_SQL: &str = r#"
-        INSERT INTO md5_hash_table (file_id, hash)
-        VALUES (?, ?)
-    "#;
+            INSERT INTO md5_hash_table (file_id, hash)
+            VALUES (?, ?)
+        "#;
 
         let mut stmt = connection.prepare(INSERT_SQL).unwrap();
         match stmt.execute([&format!("{}", self.file_id), &self.hash]) {
             Ok(_) => return connection.last_insert_rowid(),
             Err(e) => {
-                eprintln!("FileTable: {}", e);
-            }
-        };
+                if db::is_sqlite_error_constraint_violation(&e) {
+                    let duplicated_id = Self::get_id_by_file_id(connection, self.file_id);
+                    return duplicated_id;
+                }
 
-        -1
+                eprintln!("Md5HashTable: {}", e);
+                -1
+            }
+        }
     }
 
     fn update(&self, connection: &Connection) -> i64 {
@@ -103,5 +109,11 @@ impl Model for Md5HashTable {
 
         let mut stmt = connection.prepare(DELETE_SQL).unwrap();
         stmt.execute([self.id.unwrap()]).unwrap();
+    }
+}
+
+impl Md5HashTable {
+    pub fn get_id_by_file_id(connection: &Connection, file_id: i64) -> i64 {
+        db::get_id_by_file_id(connection, "md5_hash_table", file_id)
     }
 }
