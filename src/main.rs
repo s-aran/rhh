@@ -76,6 +76,18 @@ struct Args {
         help = "read checksums from the FILEs and check them"
     )]
     filepath: Option<String>,
+    #[arg(
+        long = "init-db",
+        default_value = "false",
+        help = "drop database and insert file and hash records"
+    )]
+    initialize_database: bool,
+    #[arg(
+        long = "update-db",
+        default_value = "false",
+        help = "append file and hash records to database"
+    )]
+    update_database: bool,
 }
 
 async fn async_calc_md5(value: impl Into<String>) -> String {
@@ -114,10 +126,32 @@ where
         });
 }
 
+fn validate_database_arguments(args: &Args) -> Result<(bool, bool), String> {
+    let initialize = args.initialize_database;
+    let update = args.update_database;
+
+    if initialize && update {
+        return Err(format!("invalid option: --initialize-db with --update-db"));
+    }
+
+    Ok((initialize, update))
+}
+
 fn main() {
     println!("Hello, world!");
 
     let args = Args::parse();
+    match initialize_database(&args) {
+        Ok(processed) => {
+            if processed {
+                return;
+            }
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            return;
+        }
+    };
 
     let mut file = File::open("Cargo.lock").unwrap();
     let mut buf = String::new();
@@ -148,22 +182,38 @@ fn main() {
 
     let cpus = available_parallelism().unwrap().get();
     println!("number of CPUs: {}", cpus);
+}
 
-    // glob_with_recursive("./*", &mut |p| {
-    //     let mut f = File::open(p).unwrap();
-    //     let mut buf = String::new();
-    //     let _ = f.read_to_string(&mut buf);
-    //     println!(
-    //         "{}    {}    {}",
-    //         p.display(),
-    //         Md5Hash::calc(&buf),
-    //         Sha1Hash::calc(&buf)
-    //     );
-    // });
+fn initialize_database(args: &Args) -> Result<bool, String> {
+    let (initialize, update) = match validate_database_arguments(&args) {
+        Ok(flags) => flags,
+        Err(s) => {
+            eprintln!("{}", s);
+            return Err(s);
+        }
+    };
+
+    if !(initialize || update) {
+        return Ok(false);
+    }
 
     let db_path = Path::new("hash_table.db");
-    let mut conn = Connection::open(&db_path).unwrap();
+    if initialize {
+        match std::fs::remove_file(&db_path) {
+            Ok(_) => {}
+            Err(e) => {
+                return Err(format!("{}", e));
+            }
+        }
+    };
 
+    let mut conn = Connection::open(&db_path).unwrap();
+    create_database(&mut conn);
+
+    Ok(true)
+}
+
+fn create_database(conn: &mut Connection) {
     println!("con = {:?}", conn);
 
     let initialize_list = [r#"
