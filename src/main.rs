@@ -1,13 +1,12 @@
 use glob::glob;
+use hashes::hash::Hash;
+use hashes::md5::Md5Hash;
+use hashes::sha1::Sha1Hash;
+use hashes::sha256::Sha256Hash;
 use models::model::Model;
-use std::path::{self, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::thread::available_parallelism;
-use std::{fs::File, future::Future, io::Read};
-
-use crypto::digest::Digest;
-use crypto::md5::Md5;
-use crypto::sha1::Sha1;
-use crypto::sha2::Sha256;
+use std::{fs::File, io::Read};
 
 use clap::{arg, command, Parser};
 use rusqlite::Connection;
@@ -20,50 +19,9 @@ use models::md5_hash_table::Md5HashTable;
 use models::sha1_hash_table::Sha1HashTable;
 use models::sha256_hash_table::Sha256HashTable;
 
-trait Hash {
-    fn calc(value: impl Into<String>) -> String;
+use crate::hashes::hash::ChecksumFileUtils;
 
-    fn calc_from_file(file: &mut File) -> String {
-        let mut buf = String::new();
-        let _ = file.read_to_string(&mut buf);
-        Self::calc(buf)
-    }
-
-    fn calc_from_path(path: &Path) -> String {
-        let mut file = File::open(path).unwrap();
-        Self::calc_from_file(&mut file)
-    }
-}
-
-struct Md5Hash {}
-
-impl Hash for Md5Hash {
-    fn calc(value: impl Into<String>) -> String {
-        let mut md5 = Md5::new();
-        md5.input(value.into().as_bytes());
-        md5.result_str()
-    }
-}
-
-struct Sha1Hash {}
-
-impl Hash for Sha1Hash {
-    fn calc(value: impl Into<String>) -> String {
-        let mut sha1 = Sha1::new();
-        sha1.input(value.into().as_bytes());
-        sha1.result_str()
-    }
-}
-
-struct Sha256Hash {}
-
-impl Hash for Sha256Hash {
-    fn calc(value: impl Into<String>) -> String {
-        let mut sha256 = Sha256::new();
-        sha256.input(value.into().as_bytes());
-        sha256.result_str()
-    }
-}
+mod hashes;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about=None)]
@@ -75,7 +33,7 @@ struct Args {
         long = "check",
         help = "read checksums from the FILEs and check them"
     )]
-    filepath: Option<String>,
+    checksum_filepath: Option<String>,
     #[arg(
         long = "init-db",
         default_value = "false",
@@ -90,23 +48,11 @@ struct Args {
     update_database: bool,
 }
 
-async fn async_calc_md5(value: impl Into<String>) -> String {
-    Md5Hash::calc(value)
-}
-
-async fn async_calc_sha1(value: impl Into<String>) -> String {
-    Sha1Hash::calc(value)
-}
-
-async fn async_calc_sha256(value: impl Into<String>) -> String {
-    Sha256Hash::calc(value)
-}
-
-async fn async_calc_md5_from_file(file: &mut File) -> impl Future<Output = String> {
-    let mut buf = String::new();
-    let _ = file.read_to_string(&mut buf);
-    async_calc_md5(buf)
-}
+// async fn async_calc_md5_from_file(file: &mut File) -> impl Future<Output = String> {
+//     let mut buf = String::new();
+//     let _ = file.read_to_string(&mut buf);
+//     async_calc_md5(buf)
+// }
 
 fn glob_with_recursive<F>(pattern: &str, handler: &mut F)
 where
@@ -137,10 +83,34 @@ fn validate_database_arguments(args: &Args) -> Result<(bool, bool), String> {
     Ok((initialize, update))
 }
 
+fn includes_checksum_filename(filepath: &Path, lower_pattern: impl Into<String>) -> bool {
+    let filename_os_str = match filepath.file_name() {
+        Some(n) => n,
+        None => {
+            return false;
+        }
+    };
+
+    filename_os_str
+        .to_string_lossy()
+        .to_lowercase()
+        .find(&lower_pattern.into())
+        .is_some()
+}
+
 fn main() {
     println!("Hello, world!");
 
     let args = Args::parse();
+
+    // passed checksum file
+    if args.checksum_filepath.is_some() {
+        let checksum_filepath_string = args.checksum_filepath.unwrap();
+        let checksum_filepath = Path::new(&checksum_filepath_string);
+        ChecksumFileUtils::check(checksum_filepath, true);
+        return;
+    }
+
     match initialize_database(&args) {
         Ok(processed) => {
             if processed {
@@ -157,28 +127,28 @@ fn main() {
     let mut buf = String::new();
     let _ = file.read_to_string(&mut buf);
 
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    // let rt = tokio::runtime::Runtime::new().unwrap();
 
-    rt.block_on(async {
-        let md5hash = async_calc_md5(&buf).await;
-        println!("{}", md5hash);
+    // rt.block_on(async {
+    //     let md5hash = async_calc_md5(&buf).await;
+    //     println!("{}", md5hash);
 
-        let sha1hash = async_calc_sha1(&buf).await;
-        println!("{}", sha1hash);
+    //     let sha1hash = async_calc_sha1(&buf).await;
+    //     println!("{}", sha1hash);
 
-        let sha256hash = async_calc_sha256(&buf).await;
-        println!("{}", sha256hash);
+    //     let sha256hash = async_calc_sha256(&buf).await;
+    //     println!("{}", sha256hash);
 
-        if args.file.is_none() {
-            return;
-        }
+    //     if args.file.is_none() {
+    //         return;
+    //     }
 
-        for f in args.file.unwrap() {
-            let mut file = File::open(&f).unwrap();
-            let md5hash = async_calc_md5_from_file(&mut file).await;
-            println!("{}  {}", md5hash.await, &f);
-        }
-    });
+    //     for f in args.file.unwrap() {
+    //         let mut file = File::open(&f).unwrap();
+    //         let md5hash = async_calc_md5_from_file(&mut file).await;
+    //         println!("{}  {}", md5hash.await, &f);
+    //     }
+    // });
 
     let cpus = available_parallelism().unwrap().get();
     println!("number of CPUs: {}", cpus);
