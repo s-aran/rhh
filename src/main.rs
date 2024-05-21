@@ -75,8 +75,6 @@ fn validate_database_arguments(args: &Args) -> Result<(bool, bool), String> {
 }
 
 fn main() {
-    println!("Hello, world!");
-
     let args = Args::parse();
 
     // passed checksum file
