@@ -47,22 +47,16 @@ impl ChecksumFileUtils {
         for (hash, filename) in hash_filename_map {
             match Self::check_hash(&hash, &filename, ignore_missing) {
                 Ok(r) => {
-                    if r {
-                        println!("{}: OK", filename);
-                    } else {
-                        println!("{}: FAILED", filename);
-                    }
+                    println!("{}: {}", filename, r);
                 }
                 Err(e) => {
-                    if !ignore_missing {
-                        panic!();
-                    }
+                    panic!("{}", e);
                 }
             };
         }
     }
 
-    fn parse_checksum_file(checksum_file: &Path) -> Result<HashMap<String, String>, String> {
+    fn parse_checksum_file(checksum_file: &Path) -> Result<Vec<(String, String)>, String> {
         let mut checksum_file = match File::open(checksum_file) {
             Ok(f) => f,
             Err(e) => {
@@ -76,7 +70,7 @@ impl ChecksumFileUtils {
 
         // key ... checksum
         // value ... filename
-        let mut checksum_filename_map = HashMap::<String, String>::new();
+        let mut checksum_filename_vec = Vec::<(String, String)>::new();
         for line in buf.lines() {
             let space_pos = match line.find(Self::DELIMITER) {
                 Some(n) => n,
@@ -88,31 +82,36 @@ impl ChecksumFileUtils {
             let hash = line[0..space_pos].to_owned();
             let filename = line[space_pos + delimiter_length..line.len()].to_owned();
 
-            checksum_filename_map.insert(hash, filename);
+            checksum_filename_vec.push((hash, filename));
         }
 
-        Ok(checksum_filename_map)
+        Ok(checksum_filename_vec)
     }
 
-    fn check_hash(hash: &String, filename: &String, ignore_missing: bool) -> Result<bool, String> {
+    fn check_hash(
+        hash: &String,
+        filename: &String,
+        ignore_missing: bool,
+    ) -> Result<&'static str, String> {
         let path = Path::new(&filename);
-        if !ignore_missing && !path.exists() {
+        if !path.exists() {
+            if ignore_missing {
+                return Ok("Not found");
+            }
             return Err(format!("{} not found", filename));
         }
 
-        if hash.len() == Md5Hash::get_hash_length() {
-            return Ok(hash == &Md5Hash::calc_from_path(&path));
-        }
+        let matched = if hash.len() == Md5Hash::get_hash_length() {
+            hash == &Md5Hash::calc_from_path(&path)
+        } else if hash.len() == Sha1Hash::get_hash_length() {
+            hash == &Sha1Hash::calc_from_path(&path)
+        } else if hash.len() == Sha256Hash::get_hash_length() {
+            hash == &Sha256Hash::calc_from_path(&path)
+        } else {
+            return Err(format!("invalid hash length: {}  {}", hash, filename));
+        };
 
-        if hash.len() == Sha1Hash::get_hash_length() {
-            return Ok(hash == &Sha1Hash::calc_from_path(&path));
-        }
-
-        if hash.len() == Sha256Hash::get_hash_length() {
-            return Ok(hash == &Sha256Hash::calc_from_path(&path));
-        }
-
-        return Err(format!("invalid hash length: {}  {}", hash, filename));
+        Ok(if matched { "OK" } else { "FAILED" })
     }
 }
 
