@@ -1,4 +1,6 @@
 use glob::glob;
+use std::borrow::Borrow;
+use std::process::ExitCode;
 
 use std::path::{Path, PathBuf};
 use std::thread::available_parallelism;
@@ -13,8 +15,11 @@ use crate::db::{create_database, initialize_database};
 use crate::hashes::hash::ChecksumFileUtils;
 
 mod hashes;
+mod modes;
 
-#[derive(Parser, Debug)]
+use crate::modes::utils::{self, determine_mode};
+
+#[derive(Clone, Parser, Debug)]
 #[command(author, version, about, long_about=None)]
 struct Args {
     #[arg(help = "FILE")]
@@ -37,6 +42,8 @@ struct Args {
         help = "append file and hash records to database"
     )]
     update_database: bool,
+    #[arg(short = 'd', long = "use-db", help = "use hash database")]
+    use_db: bool,
 }
 
 // async fn async_calc_md5_from_file(file: &mut File) -> impl Future<Output = String> {
@@ -63,46 +70,57 @@ where
         });
 }
 
-fn validate_database_arguments(args: &Args) -> Result<(bool, bool), String> {
+fn validate_database_arguments(args: &Args) -> Result<(bool, bool, bool), String> {
     let initialize = args.initialize_database;
     let update = args.update_database;
+    let use_db = args.use_db;
 
     if initialize && update {
         return Err(format!("invalid option: --initialize-db with --update-db"));
     }
 
-    Ok((initialize, update))
+    if use_db && (initialize || update) {
+        return Err(format!(
+            "invalid option: --use-db with --initialize-db or --update-db"
+        ));
+    }
+
+    Ok((initialize, update, use_db))
 }
 
-fn main() {
+fn main() -> ExitCode {
     let args = Args::parse();
+
+    // passed file
+    let a = determine_mode(&args);
+    a.run();
 
     // passed checksum file
     if args.checksum_filepath.is_some() {
         let checksum_filepath_string = args.checksum_filepath.unwrap();
         let checksum_filepath = Path::new(&checksum_filepath_string);
         ChecksumFileUtils::check(checksum_filepath, true);
-        return;
+        return 0.into();
     }
 
     // db
-    let (initialize, update) = match validate_database_arguments(&args) {
+    let (initialize, update, use_db) = match validate_database_arguments(&args) {
         Ok(flags) => flags,
         Err(s) => {
             eprintln!("{}", s);
-            return;
+            return 0.into();
         }
     };
 
-    if !(initialize || update) {
-        return;
-    }
+    // if !(initialize || update) {
+    //     return 1.into();
+    // }
 
     let mut connection = match initialize_database(initialize, update) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("{}", e);
-            return;
+            return 1.into();
         }
     };
 
@@ -142,4 +160,6 @@ fn main() {
 
     let cpus = available_parallelism().unwrap().get();
     println!("number of CPUs: {}", cpus);
+
+    return 0.into();
 }
