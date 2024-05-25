@@ -1,7 +1,7 @@
 use crate::hashes;
 use crate::hashes::hash::Hash;
 use crate::models::model::Model;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use rusqlite::{Connection, Error, ErrorCode};
 
@@ -12,55 +12,6 @@ use crate::models::sha256_hash_table::Sha256HashTable;
 use hashes::md5::Md5Hash;
 use hashes::sha1::Sha1Hash;
 use hashes::sha256::Sha256Hash;
-
-trait DbBase<S> {
-    fn open_db_file(path: &Path) -> Result<S, rusqlite::Error>;
-    fn open_db_in_memory() -> Result<S, rusqlite::Error>;
-    fn execute(self, sql: impl Into<String>) -> Result<(), rusqlite::Error>;
-}
-
-struct DbSqlite3 {
-    connection: rusqlite::Connection,
-}
-
-impl DbBase<Self> for DbSqlite3 {
-    fn open_db_file(path: &Path) -> Result<Self, rusqlite::Error> {
-        let conn = rusqlite::Connection::open(&path);
-        match conn {
-            Ok(connection) => Ok(DbSqlite3 { connection }),
-            Err(e) => Err(e),
-        }
-    }
-
-    fn open_db_in_memory() -> Result<Self, rusqlite::Error> {
-        let conn = rusqlite::Connection::open_in_memory();
-        match conn {
-            Ok(connection) => Ok(DbSqlite3 { connection }),
-            Err(e) => Err(e),
-        }
-    }
-
-    fn execute(self, sql: impl Into<String>) -> Result<(), rusqlite::Error> {
-        self.connection.execute(sql.into().as_str(), [])?;
-        Ok(())
-    }
-}
-
-struct HashDbFile {}
-
-impl DbBase<Self> for HashDbFile {
-    fn open_db_file(_path: &Path) -> Result<Self, rusqlite::Error> {
-        todo!()
-    }
-
-    fn open_db_in_memory() -> Result<Self, rusqlite::Error> {
-        todo!()
-    }
-
-    fn execute(self, _sql: impl Into<String>) -> Result<(), rusqlite::Error> {
-        todo!()
-    }
-}
 
 pub static HASH_TABLE_FILENAME: &str = "hash_table.db";
 

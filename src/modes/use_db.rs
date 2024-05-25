@@ -13,4 +13,3 @@ impl Mode for UseDatabaseMode {
         0.into()
     }
 }
-

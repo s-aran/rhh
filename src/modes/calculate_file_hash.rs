@@ -3,8 +3,6 @@ use std::{
     process::ExitCode,
 };
 
-use crypto::md5::Md5;
-
 use crate::hashes::{hash::Hash, md5::Md5Hash, sha1::Sha1Hash, sha256::Sha256Hash};
 
 use super::utils::Mode;

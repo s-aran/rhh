@@ -77,9 +77,9 @@ pub fn determine_mode(args: &Args) -> Box<dyn Mode> {
     }
 
     Box::new(CalculateStdinHashMode {
-            md5: args.md5,
-            sha1: args.sha1,
-            sha256: args.sha256,
+        md5: args.md5,
+        sha1: args.sha1,
+        sha256: args.sha256,
     })
 
     // Box::new(UnexpectedArgumentsMode { args: args.clone() })

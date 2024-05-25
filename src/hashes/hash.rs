@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs::File, io::Read, path::Path};
+use std::{fs::File, io::Read, path::Path};
 
 use super::{md5::Md5Hash, sha1::Sha1Hash, sha256::Sha256Hash};
 
@@ -113,34 +113,4 @@ impl ChecksumFileUtils {
 
         Ok(if matched { "OK" } else { "FAILED" })
     }
-}
-
-fn includes_checksum_filename(filepath: &Path, lower_pattern: impl Into<String>) -> bool {
-    let filename_os_str = match filepath.file_name() {
-        Some(n) => n,
-        None => {
-            return false;
-        }
-    };
-
-    filename_os_str
-        .to_string_lossy()
-        .to_lowercase()
-        .find(&lower_pattern.into())
-        .is_some()
-}
-
-fn is_checksum_file_md5(checksum_filepath: &Path) -> bool {
-    static PATTERN: &str = "md5";
-    includes_checksum_filename(checksum_filepath, PATTERN)
-}
-
-fn is_checksum_file_sha1(checksum_filepath: &Path) -> bool {
-    static PATTERN: &str = "sha1";
-    includes_checksum_filename(checksum_filepath, PATTERN)
-}
-
-fn is_checksum_file_sha256(checksum_filepath: &Path) -> bool {
-    static PATTERN: &str = "sha256";
-    includes_checksum_filename(checksum_filepath, PATTERN)
 }
