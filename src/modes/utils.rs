@@ -11,6 +11,16 @@ use super::update_db::UpdateDatabaseMode;
 use super::use_db::UseDatabaseMode;
 use super::validate_checksum::ValidateChecksumMode;
 
+#[macro_export]
+macro_rules! print_some {
+    ($hash: tt) => {
+        match $hash {
+            Some(h) => print!("{}  ", h),
+            None => {}
+        }
+    };
+}
+
 pub trait Mode {
     fn run(&self) -> ExitCode;
 }

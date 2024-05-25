@@ -3,6 +3,23 @@ use std::process::ExitCode;
 
 use super::utils::Mode;
 use crate::hashes::{hash::Hash, md5::Md5Hash, sha1::Sha1Hash, sha256::Sha256Hash};
+use crate::print_some;
+
+macro_rules! calc_hash {
+    ($calculator:ty, $input:tt) => {
+        Some(<$calculator>::calc($input))
+    };
+}
+
+macro_rules! calc_hash_if {
+    ($flag:tt, $calculator:ty, $input:tt) => {
+        if $flag {
+            calc_hash!($calculator, $input)
+        } else {
+            None
+        }
+    };
+}
 
 pub struct CalculateStdinHashMode {
     pub md5: bool,
@@ -24,21 +41,9 @@ impl Mode for CalculateStdinHashMode {
 
         let (md5, sha1, sha256) = Self::calc_hash(&mut buffer, self.md5, self.sha1, self.sha256);
 
-        match md5 {
-            Some(md5) => print!("{}  ", md5),
-            None => {}
-        };
-
-        match sha1 {
-            Some(sha1) => print!("{}  ", sha1),
-            None => {}
-        };
-
-        match sha256 {
-            Some(sha256) => print!("{}  ", sha256),
-            None => {}
-        }
-
+        print_some!(md5);
+        print_some!(sha1);
+        print_some!(sha256);
         println!("-");
 
         0.into()
@@ -54,28 +59,16 @@ impl CalculateStdinHashMode {
     ) -> (Option<String>, Option<String>, Option<String>) {
         if !md5 && !sha1 && !sha256 {
             return (
-                Some(Md5Hash::calc(input)),
-                Some(Sha1Hash::calc(input)),
-                Some(Sha256Hash::calc(input)),
+                calc_hash!(Md5Hash, input),
+                calc_hash!(Sha1Hash, input),
+                calc_hash!(Sha256Hash, input),
             );
         }
 
         (
-            if md5 {
-                Some(Md5Hash::calc(input))
-            } else {
-                None
-            },
-            if sha1 {
-                Some(Sha1Hash::calc(input))
-            } else {
-                None
-            },
-            if sha256 {
-                Some(Sha256Hash::calc(input))
-            } else {
-                None
-            },
+            calc_hash_if!(md5, Md5Hash, input),
+            calc_hash_if!(sha1, Sha1Hash, input),
+            calc_hash_if!(sha256, Sha256Hash, input),
         )
     }
 }
