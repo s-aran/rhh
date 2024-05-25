@@ -62,6 +62,8 @@ impl DbBase<Self> for HashDbFile {
     }
 }
 
+pub static HASH_TABLE_FILENAME: &str = "hash_table.db";
+
 pub fn is_sqlite_error_constraint_violation(e: &Error) -> bool {
     match e.sqlite_error() {
         Some(e) => e.code == ErrorCode::ConstraintViolation,
@@ -88,21 +90,6 @@ pub fn get_id_by_file_id(
     let id = row.get(0).unwrap();
 
     id
-}
-
-pub fn initialize_database(initialize: bool, update: bool) -> Result<Connection, String> {
-    let db_path = Path::new("hash_table.db");
-    if initialize {
-        match std::fs::remove_file(&db_path) {
-            Ok(_) => {}
-            Err(e) => {
-                return Err(format!("{}", e));
-            }
-        }
-    };
-
-    let conn = Connection::open(&db_path).unwrap();
-    Ok(conn)
 }
 
 pub fn create_database(conn: &mut Connection, file_list: &Vec<PathBuf>) {
