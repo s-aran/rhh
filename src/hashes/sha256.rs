@@ -5,9 +5,9 @@ use crate::hashes::hash::Hash;
 pub struct Sha256Hash {}
 
 impl Hash for Sha256Hash {
-    fn calc(value: impl Into<String>) -> String {
+    fn calc_bytes(bytes: &[u8]) -> String {
         let mut sha256 = Sha256::new();
-        sha256.input(value.into().as_bytes());
+        sha256.input(bytes);
         sha256.result_str()
     }
 

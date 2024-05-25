@@ -6,8 +6,12 @@ pub struct Md5Hash {}
 
 impl Hash for Md5Hash {
     fn calc(value: impl Into<String>) -> String {
+        Self::calc_bytes(value.into().as_bytes())
+    }
+
+    fn calc_bytes(bytes: &[u8]) -> String {
         let mut md5 = Md5::new();
-        md5.input(value.into().as_bytes());
+        md5.input(bytes);
         md5.result_str()
     }
 

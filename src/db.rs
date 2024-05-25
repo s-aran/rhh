@@ -1,6 +1,8 @@
 use crate::hashes;
 use crate::hashes::hash::Hash;
 use crate::models::model::Model;
+use std::fs::File;
+use std::io::Read;
 use std::path::PathBuf;
 
 use rusqlite::{Connection, Error, ErrorCode};
@@ -70,12 +72,22 @@ pub fn create_database(conn: &mut Connection, file_list: &Vec<PathBuf>) {
 
     {
         let tx = conn.transaction().unwrap();
-        for file in file_list.iter() {
-            let file_id = insert_files(&tx, &file);
+        for path in file_list.iter() {
+            let file_id = insert_files(&tx, &path);
+            println!("{}", path.display());
 
-            insert_md5_hash_table(&tx, file_id, &file);
-            insert_sha1_hash_table(&tx, file_id, &file);
-            insert_sha256_hash_table(&tx, file_id, &file);
+            let mut file = match File::open(&path) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("{}", e);
+                    continue;
+                }
+            };
+            let mut buffer = vec![];
+            file.read_to_end(&mut buffer).expect("Failed to read file");
+            insert_md5_hash_table(&tx, file_id, &buffer);
+            insert_sha1_hash_table(&tx, file_id, &buffer);
+            insert_sha256_hash_table(&tx, file_id, &buffer);
         }
 
         match tx.commit() {
@@ -99,8 +111,8 @@ fn insert_files(conn: &Connection, path: &PathBuf) -> i64 {
     f.insert(conn)
 }
 
-fn insert_md5_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i64 {
-    let hash = Md5Hash::calc_from_path(&path);
+fn insert_md5_hash_table(conn: &Connection, file_id: i64, buffer: &Vec<u8>) -> i64 {
+    let hash = Md5Hash::calc_bytes(buffer);
     let h = Md5HashTable {
         id: None,
         file_id,
@@ -110,8 +122,8 @@ fn insert_md5_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i64
     h.insert(conn)
 }
 
-fn insert_sha1_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i64 {
-    let hash = Sha1Hash::calc_from_path(&path);
+fn insert_sha1_hash_table(conn: &Connection, file_id: i64, buffer: &Vec<u8>) -> i64 {
+    let hash = Sha1Hash::calc_bytes(buffer);
     let h = Sha1HashTable {
         id: None,
         file_id,
@@ -121,8 +133,8 @@ fn insert_sha1_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i6
     h.insert(conn)
 }
 
-fn insert_sha256_hash_table(conn: &Connection, file_id: i64, path: &PathBuf) -> i64 {
-    let hash = Sha256Hash::calc_from_path(&path);
+fn insert_sha256_hash_table(conn: &Connection, file_id: i64, buffer: &Vec<u8>) -> i64 {
+    let hash = Sha256Hash::calc_bytes(buffer);
     let h = Sha256HashTable {
         id: None,
         file_id,

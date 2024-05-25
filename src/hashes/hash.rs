@@ -3,9 +3,16 @@ use std::{fs::File, io::Read, path::Path};
 use super::{md5::Md5Hash, sha1::Sha1Hash, sha256::Sha256Hash};
 
 pub trait Hash {
-    fn calc(value: impl Into<String>) -> String;
+    fn calc(value: impl Into<String>) -> String {
+        Self::calc_bytes(value.into().as_bytes())
+    }
     async fn acalc(value: impl Into<String>) -> String {
         Self::calc(value)
+    }
+
+    fn calc_bytes(bytes: &[u8]) -> String;
+    async fn acalc_bytes(bytes: &[u8]) -> String {
+        Self::calc_bytes(bytes)
     }
 
     fn calc_from_file(file: &mut File) -> String {
