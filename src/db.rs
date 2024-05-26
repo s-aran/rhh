@@ -101,11 +101,10 @@ pub fn create_database(conn: &mut Connection, file_list: &Vec<PathBuf>) {
 }
 
 fn insert_files(conn: &Connection, path: &PathBuf) -> i64 {
-    let file_name = path.file_name().unwrap().to_str().unwrap();
     let f = FileTable {
         id: None,
-        full_path: path.to_str().unwrap().to_string(),
-        file_name: file_name.to_string(),
+        full_path: path.to_string_lossy().to_string(),
+        file_name: path.file_name().unwrap().to_string_lossy().to_string(),
     };
 
     f.insert(conn)
