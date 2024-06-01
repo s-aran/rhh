@@ -45,6 +45,7 @@ fn validate_database_arguments(args: &Args) -> Result<(bool, bool, bool), String
 }
 
 pub fn determine_mode(args: &Args) -> Box<dyn Mode> {
+    // process DB
     let (initialize, update, use_db) = match validate_database_arguments(&args) {
         Ok(flags) => flags,
         Err(s) => {
@@ -80,6 +81,7 @@ pub fn determine_mode(args: &Args) -> Box<dyn Mode> {
         });
     }
 
+    // passed files
     if args.files.is_some() {
         let files = args
             .clone()
@@ -97,11 +99,10 @@ pub fn determine_mode(args: &Args) -> Box<dyn Mode> {
         });
     }
 
+    // stdin
     Box::new(CalculateStdinHashMode {
         md5: args.md5,
         sha1: args.sha1,
         sha256: args.sha256,
     })
-
-    // Box::new(UnexpectedArgumentsMode { args: args.clone() })
 }
