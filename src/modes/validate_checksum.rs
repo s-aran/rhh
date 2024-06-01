@@ -1,21 +1,23 @@
-use std::process::ExitCode;
+use std::{path::PathBuf, process::ExitCode};
 
-use crate::Args;
 use crate::ChecksumFileUtils;
 
 use super::utils::Mode;
 
-use std::path::Path;
-
 pub struct ValidateChecksumMode {
-    pub args: Args,
+    pub checksum_filepath: PathBuf,
+    pub ignore_missing: bool,
 }
 
 impl Mode for ValidateChecksumMode {
     fn run(&self) -> ExitCode {
-        let checksum_filepath_string = self.args.checksum_filepath.as_ref().unwrap();
-        let checksum_filepath = Path::new(&checksum_filepath_string);
-        ChecksumFileUtils::check(checksum_filepath, true);
-        0.into()
+        let file_path = self.checksum_filepath.as_path();
+        match ChecksumFileUtils::check(file_path, self.ignore_missing) {
+            Ok(_) => ExitCode::SUCCESS,
+            Err(e) => {
+                println!("{}", e);
+                ExitCode::FAILURE
+            }
+        }
     }
 }

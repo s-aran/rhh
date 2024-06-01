@@ -36,6 +36,13 @@ struct Args {
     checksum_filepath: Option<String>,
 
     #[arg(
+        long = "ignore-missing",
+        alias = "ignore",
+        help = "do not fail or report status for missing files"
+    )]
+    ignore_missing: bool,
+
+    #[arg(
         long = "init-db",
         default_value = "false",
         help = "drop database and insert file and hash records"

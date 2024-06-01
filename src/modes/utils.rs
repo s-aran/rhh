@@ -1,5 +1,6 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::str::FromStr;
 
 use crate::Args;
 
@@ -66,7 +67,17 @@ pub fn determine_mode(args: &Args) -> Box<dyn Mode> {
 
     // passed checksum file
     if args.checksum_filepath.is_some() {
-        return Box::new(ValidateChecksumMode { args: args.clone() });
+        let checksum_filepath = Path::new(match args.checksum_filepath {
+            Some(ref p) => p,
+            None => {
+                return Box::new(UnexpectedArgumentsMode { args: args.clone() });
+            }
+        });
+
+        return Box::new(ValidateChecksumMode {
+            checksum_filepath: PathBuf::from(checksum_filepath),
+            ignore_missing: args.ignore_missing,
+        });
     }
 
     if args.files.is_some() {
